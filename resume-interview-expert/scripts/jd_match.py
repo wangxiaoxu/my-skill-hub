@@ -4,6 +4,8 @@
 输入：JD 文本 + 简历文本（文件或 - 表示 stdin）。
 输出：覆盖/深度/证据三个维度分数、综合分、结论、缺口清单。
 JD 为空或抽不出任何关键词时退出码 2，不给出误导性结论。
+词典外的英文 token 只在含大写/数字/点，或出现在任职要求类章节时计入，
+避免公司介绍等套话进入 required。
 
 用法：
     python3 jd_match.py --jd jd.txt --resume resume.txt
@@ -52,6 +54,7 @@ SYNONYM_GROUPS = {
     "javascript": ("JavaScript", ["javascript", "js"]),
     "postgresql": ("PostgreSQL", ["postgresql", "postgres", "pg"]),
     "go": ("Go", ["go", "golang"]),
+    "full-stack": ("full-stack", ["full-stack", "fullstack"]),
 }
 VARIANT_TO_CANONICAL = {}
 for _canonical, (_display, _variants) in SYNONYM_GROUPS.items():
@@ -91,31 +94,39 @@ def _variant_forms(variant):
     return (variant,), True
 
 
-EN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.]{1,}")
+EN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#._-]*")
 METRIC_RE = re.compile(
     r"\d+(?:\.\d+)?\s*(?:%|％|万|亿|倍|人|次|个|条|天|小时|分钟|ms|QPS|单|元|美元)"
 )
 
 EN_STOPWORDS = {
     "about", "able", "all", "also", "and", "any", "are", "as", "at", "be",
-    "bonus", "boot", "build", "built", "business", "but", "by", "can", "company",
-    "data", "description", "design", "development", "engineer", "engineering",
-    "etc", "experience", "familiar", "for", "from", "good", "has", "have",
-    "in", "into", "is", "it", "job", "junior", "knowledge", "manager", "may",
-    "more", "must", "new", "nice", "not", "of", "on", "or", "other", "our",
-    "plus", "preferred", "proficient", "product", "products", "qualifications",
+    "benefits", "bonus", "boot", "build", "built", "business", "but", "by",
+    "can", "company", "compensation", "competitive", "culture", "data",
+    "description", "design", "development", "e.g", "engineer", "engineering",
+    "etc", "experience", "familiar", "for", "friendly", "from", "full", "good",
+    "has", "have", "hiring", "i.e", "in", "into", "is", "it", "job", "junior",
+    "knowledge", "manager", "may", "more", "must", "new", "nice", "not", "offer",
+    "of", "office", "on", "or", "other", "our", "package", "plus", "preferred",
+    "proficient", "product", "products", "qualifications", "remote",
     "requirements", "responsibilities", "role", "senior", "service", "services",
-    "should", "skill", "skills", "strong", "system", "systems", "team", "teams",
-    "than", "that", "the", "their", "they", "this", "to", "use", "used",
-    "using", "we", "will", "with", "work", "working", "year", "years", "your",
+    "shanghai", "should", "skill", "skills", "stack", "strong", "system",
+    "systems", "team", "teams", "than", "that", "the", "their", "they", "this",
+    "to", "use", "used", "using", "we", "will", "with", "work", "working",
+    "year", "years", "your",
 }
 
 BONUS_SECTION_MARKERS = ("加分项", "加分", "优先条件", "nice to have", "preferred qualifications")
-REQUIRED_SECTION_MARKERS = (
-    "任职要求", "岗位要求", "职位要求", "岗位职责", "工作职责", "职责",
-    "requirements", "responsibilities", "qualifications",
+ELIGIBLE_SECTION_MARKERS = (
+    "任职要求", "岗位要求", "职位要求", "任职资格", "加分项", "你需要",
+    "requirements", "qualifications", "preferred qualifications", "nice to have",
+)
+NON_ELIGIBLE_SECTION_MARKERS = (
+    "岗位职责", "工作职责", "职责", "公司介绍", "团队介绍", "关于我们",
+    "福利", "薪资", "工作地点", "responsibilities", "about us", "benefits",
 )
 BONUS_LINE_MARKERS = ("加分", "优先", "最好", "了解", "nice to have", "plus", "preferred", "bonus")
+ELIGIBLE_LINE_MARKERS = ("加分", "优先", "最好", "nice to have", "plus", "preferred", "bonus")
 
 
 def is_ascii(text):
@@ -149,24 +160,39 @@ def count_occurrences(keyword, text):
 
 
 def classify_lines(lines):
-    """返回 [(line, is_bonus)]，按章节标题与行内标记判断。"""
+    """返回 [(line, is_bonus, in_eligible_section)]。"""
     current_bonus = False
+    current_eligible = False
     output = []
     for line in lines:
         low = line.lower()
         if any(marker in low for marker in BONUS_SECTION_MARKERS):
             current_bonus = True
-        elif any(marker in low for marker in REQUIRED_SECTION_MARKERS):
+            current_eligible = True
+        elif any(marker in low for marker in ELIGIBLE_SECTION_MARKERS):
             current_bonus = False
+            current_eligible = True
+        elif any(marker in low for marker in NON_ELIGIBLE_SECTION_MARKERS):
+            current_bonus = False
+            current_eligible = False
         is_bonus = current_bonus
         if any(marker in low for marker in BONUS_LINE_MARKERS):
             is_bonus = True
-        output.append((line, is_bonus))
+        line_eligible = current_eligible or any(
+            marker in low for marker in ELIGIBLE_LINE_MARKERS
+        )
+        output.append((line, is_bonus, line_eligible))
     return output
 
 
-def extract_keywords(jd_text):
+def _has_token_signal(raw):
+    """含大写字母、数字或点的 token 自带技术信号。"""
+    return any(char.isupper() or char.isdigit() or char == "." for char in raw)
+
+
+def extract_keywords(jd_text, lines):
     """从 JD 中抽取词典词与英文技术词，按同义词 canonical 去重。"""
+    eligible_lines = [line for line, _, eligible in lines if eligible]
     keywords = {}
     for term in TERMS:
         if contains(term, jd_text):
@@ -178,10 +204,16 @@ def extract_keywords(jd_text):
             )
             keywords.setdefault(canonical, display)
     for match in EN_TOKEN_RE.finditer(jd_text):
-        raw = match.group(0).strip("._-+ ")
+        raw = match.group(0).strip("._- ")
         low = raw.lower()
         if len(low) < 2 or low.isdigit() or low in EN_STOPWORDS:
             continue
+        if len(low) <= 2 and low in SHORT_TOKEN_CASE_FORMS:
+            if raw not in SHORT_TOKEN_CASE_FORMS[low]:
+                continue
+        if not _has_token_signal(raw):
+            if not any(contains(raw, line) for line in eligible_lines):
+                continue
         canonical = canonical_key(low)
         display = (
             SYNONYM_GROUPS[canonical][0]
@@ -194,7 +226,7 @@ def extract_keywords(jd_text):
 
 def score(jd_text, resume_text):
     lines = classify_lines(jd_text.splitlines() or [jd_text])
-    keywords = extract_keywords(jd_text)
+    keywords = extract_keywords(jd_text, lines)
     if not keywords:
         raise ValueError("未能从 JD 中识别出任何关键词")
 
@@ -204,7 +236,7 @@ def score(jd_text, resume_text):
         occurrences = count_occurrences(display, resume_text)
         hits = [
             is_bonus
-            for line, is_bonus in lines
+            for line, is_bonus, _ in lines
             if contains(display, line)
         ]
         if not hits:

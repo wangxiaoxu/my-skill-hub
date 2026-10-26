@@ -188,6 +188,86 @@ class JdMatchTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("未能从 JD 中识别出任何关键词", result.stderr)
 
+    def test_boilerplate_tokens_are_not_keywords(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "公司介绍：\n"
+                "We offer a competitive compensation package, a friendly office "
+                "in Shanghai, remote-friendly culture, and a full-stack hiring stack.\n\n"
+                "任职要求：\n"
+                "熟悉 Redis。\n",
+                encoding="utf-8",
+            )
+            resume_path.write_text("张三\n熟悉 Redis\n", encoding="utf-8")
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        keywords = {item["keyword"].lower() for item in items}
+        self.assertEqual(keywords, {"redis"})
+        redis_item = [
+            item for item in items if item["keyword"].lower() == "redis"
+        ][0]
+        self.assertTrue(redis_item["matched"])
+
+    def test_dotted_and_hyphenated_tokens_stay_whole(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "任职要求：\n"
+                "1. 熟悉 Node.js\n"
+                "2. 有 full-stack 经验\n",
+                encoding="utf-8",
+            )
+            resume_path.write_text(
+                "使用 Node.js 与 fullstack 开发\n", encoding="utf-8"
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        keywords = {item["keyword"] for item in items}
+        self.assertEqual(keywords, {"Node.js", "full-stack"})
+        matched = {item["keyword"] for item in items if item["matched"]}
+        self.assertIn("Node.js", matched)
+        self.assertIn("full-stack", matched)
+
+    def test_lowercase_external_token_in_requirement_section_is_kept(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text("任职要求：\n熟悉 terraform\n", encoding="utf-8")
+            resume_path.write_text(
+                "使用 terraform 管理基础设施\n", encoding="utf-8"
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        keywords = {item["keyword"].lower() for item in items}
+        self.assertIn("terraform", keywords)
+
     def test_single_input_exits_2(self):
         result = invoke("--jd", str(FIXTURES / "jd_backend.txt"))
         self.assertEqual(result.returncode, 2)
