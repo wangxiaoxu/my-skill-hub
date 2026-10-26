@@ -69,7 +69,7 @@ class NormalizeTest(unittest.TestCase):
 
 class ClusterCliTest(unittest.TestCase):
     def test_top_cluster_and_first_last_seen(self):
-        result = run(str(FIXTURES / "errors.log"), "--top", "3", "--json")
+        result = run(str(FIXTURES / "errors.txt"), "--top", "3", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["totalLines"], 7)
@@ -82,7 +82,7 @@ class ClusterCliTest(unittest.TestCase):
         self.assertIn("connection refused", top["sample"])
 
     def test_json_log_message_field_merges_with_plain_line(self):
-        result = run(str(FIXTURES / "errors.log"), "--top", "10", "--json")
+        result = run(str(FIXTURES / "errors.txt"), "--top", "10", "--json")
         payload = json.loads(result.stdout)
         timeout_cluster = [
             item
@@ -103,7 +103,7 @@ class ClusterCliTest(unittest.TestCase):
         self.assertEqual(payload["clusters"][0]["count"], 2)
 
     def test_missing_file_exits_2(self):
-        result = run(str(FIXTURES / "missing.log"))
+        result = run(str(FIXTURES / "missing.txt"))
         self.assertEqual(result.returncode, 2)
         self.assertIn("无法读取", result.stderr)
 

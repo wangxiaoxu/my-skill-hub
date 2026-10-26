@@ -40,9 +40,9 @@ class SyslogParsingTest(unittest.TestCase):
 class LogTimelineTest(unittest.TestCase):
     def test_merge_order_and_untimed_marking(self):
         result = run(
-            str(FIXTURES / "app.log"),
-            str(FIXTURES / "access.log"),
-            str(FIXTURES / "syslog.log"),
+            str(FIXTURES / "app.txt"),
+            str(FIXTURES / "access.txt"),
+            str(FIXTURES / "syslog.txt"),
             "--year",
             "2026",
             "--json",
@@ -65,7 +65,7 @@ class LogTimelineTest(unittest.TestCase):
 
     def test_since_until_window(self):
         result = run(
-            str(FIXTURES / "app.log"),
+            str(FIXTURES / "app.txt"),
             "--since",
             "2026-10-26T10:00:05",
             "--until",
@@ -81,7 +81,7 @@ class LogTimelineTest(unittest.TestCase):
 
     def test_until_date_only_includes_whole_day(self):
         result = run(
-            str(FIXTURES / "app.log"),
+            str(FIXTURES / "app.txt"),
             "--until",
             "2026-10-26",
             "--json",
@@ -92,7 +92,7 @@ class LogTimelineTest(unittest.TestCase):
 
     def test_grep_filters_lines(self):
         result = run(
-            str(FIXTURES / "app.log"),
+            str(FIXTURES / "app.txt"),
             "--grep",
             "refused",
             "--json",
@@ -103,12 +103,12 @@ class LogTimelineTest(unittest.TestCase):
         self.assertFalse(any(item["untimed"] for item in records))
 
     def test_missing_file_exits_2(self):
-        result = run(str(FIXTURES / "does-not-exist.log"))
+        result = run(str(FIXTURES / "does-not-exist.txt"))
         self.assertEqual(result.returncode, 2)
         self.assertIn("文件不存在", result.stderr)
 
     def test_invalid_regex_exits_2(self):
-        result = run(str(FIXTURES / "app.log"), "--grep", "[")
+        result = run(str(FIXTURES / "app.txt"), "--grep", "[")
         self.assertEqual(result.returncode, 2)
 
     def test_help(self):
