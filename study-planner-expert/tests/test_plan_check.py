@@ -90,6 +90,25 @@ class PlanCheckTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["issues"], [])
 
+    def test_page_count_is_not_a_duration(self):
+        text = (
+            "# 周计划\n\n"
+            "## 周一\n"
+            "- [ ] 看书 20 页\n"
+            "产出：读完一章并复习。\n\n"
+            "## 周日（缓冲）\n"
+            "- [ ] 休息（30 分钟）\n"
+            "产出：恢复状态并复习。\n"
+        )
+        result = call_cli("-", "--json", input=text)
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        missing = [
+            item for item in payload["issues"] if item["code"] == "missing_duration"
+        ]
+        self.assertEqual(len(missing), 1)
+        self.assertIn("分钟", missing[0]["suggestion"])
+
     def test_custom_task_limit(self):
         result = call_cli(str(FIXTURES / "plan_good.md"), "--max-tasks", "1", "--json")
         self.assertEqual(result.returncode, 1)

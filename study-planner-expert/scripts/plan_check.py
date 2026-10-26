@@ -177,7 +177,7 @@ def check(text, max_tasks=3, max_daily_minutes=240, max_block_minutes=50):
                     name,
                     first_task_line or day["line"],
                     "%s 有 %d 个任务没有标注时长" % (name, missing),
-                    "写成「做题 30 分钟」「看书 20 页」这类可量化任务",
+                    "写清分钟数，例如「做题 30 分钟」「看书 20 分钟」",
                 )
             )
 
