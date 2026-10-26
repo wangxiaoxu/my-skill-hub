@@ -2,7 +2,7 @@
 name: study-planner-expert
 slug: study-planner-expert
 displayName: 学习规划专家.Skill
-version: 1.0.0
+version: 1.0.1
 summary: 把学习目标拆成周计划与每日复习安排
 description: "Use when 用户要制定学习计划、备考计划、每日学习安排或复习计划；当用户说「我想学 X 怎么开始」「考研怎么规划」「帮我排个复习计划」「总是学了就忘」时。零配置、无需 API Key，附间隔复习排程脚本。"
 tags: [study-plan, spaced-repetition, exam-prep, learning, schedule]

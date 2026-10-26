@@ -2,7 +2,7 @@
 name: resume-interview-expert
 slug: resume-interview-expert
 displayName: 简历面试专家.Skill
-version: 1.0.0
+version: 1.0.1
 summary: JD 逐条对齐打分，改写成果句，模拟真实面试追问
 description: "Use when 用户要写简历、改简历、按 JD 定制简历、准备面试或模拟面试；当用户说「帮我改简历」「这个 JD 我匹配吗」「面试会问什么」「模拟面试」时。零配置、无需 API Key，附 JD-简历匹配度脚本，不编造经历。"
 tags: [resume, interview, job-search, career, ats]

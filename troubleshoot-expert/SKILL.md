@@ -2,7 +2,7 @@
 name: troubleshoot-expert
 slug: troubleshoot-expert
 displayName: 故障排查专家.Skill
-version: 1.0.0
+version: 1.0.1
 summary: 从报错、日志或告警定位根因，给出可验证修复
 description: "Use when 用户贴出报错、堆栈、日志片段或线上告警，需要定位根因而不是猜一个改一个；当用户说「这个报错什么意思」「服务 502 了」「线上挂了」「帮我看看这段日志」「怎么复现」时。零配置、无需 API Key，内置 60+ 故障模式与 3 个零依赖排查脚本。"
 tags: [troubleshooting, sre, logs, kubernetes, root-cause]
