@@ -58,6 +58,13 @@ for _canonical, (_display, _variants) in SYNONYM_GROUPS.items():
     for _variant in _variants:
         VARIANT_TO_CANONICAL[_variant] = _canonical
 
+# ≤2 字符的短 token 容易误命中普通英文，改为按大小写精确匹配。
+SHORT_TOKEN_CASE_FORMS = {
+    "go": ("Go",),
+    "js": ("JS", "js"),
+    "pg": ("PG", "pg"),
+}
+
 
 def canonical_key(term):
     low = term.lower()
@@ -69,6 +76,19 @@ def keyword_variants(term):
     if canonical in SYNONYM_GROUPS:
         return SYNONYM_GROUPS[canonical][1]
     return [term]
+
+
+def _token_pattern(token, ignore_case):
+    flags = re.IGNORECASE if ignore_case else 0
+    return re.compile(
+        r"(?<![A-Za-z0-9.])%s(?![A-Za-z0-9])" % re.escape(token), flags
+    )
+
+
+def _variant_forms(variant):
+    if len(variant) <= 2:
+        return SHORT_TOKEN_CASE_FORMS.get(variant, (variant,)), False
+    return (variant,), True
 
 
 EN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.]{1,}")
@@ -106,8 +126,10 @@ def contains(keyword, text):
     lowered = text.lower()
     for variant in keyword_variants(keyword):
         if is_ascii(variant):
-            pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(variant)
-            if re.search(pattern, text, re.IGNORECASE) is not None:
+            forms, ignore_case = _variant_forms(variant)
+            if any(
+                _token_pattern(form, ignore_case).search(text) for form in forms
+            ):
                 return True
         elif variant.lower() in lowered:
             return True
@@ -118,8 +140,9 @@ def count_occurrences(keyword, text):
     total = 0
     for variant in keyword_variants(keyword):
         if is_ascii(variant):
-            pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(variant)
-            total += len(re.findall(pattern, text, re.IGNORECASE))
+            forms, ignore_case = _variant_forms(variant)
+            for form in forms:
+                total += len(_token_pattern(form, ignore_case).findall(text))
         else:
             total += text.lower().count(variant.lower())
     return total

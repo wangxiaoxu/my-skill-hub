@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "jd_match.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
+sys.path.insert(0, str(ROOT / "scripts"))
+import jd_match  # noqa: E402
+
 
 def invoke(*args, **kwargs):
     command = [sys.executable, str(SCRIPT), *args]
@@ -22,6 +25,21 @@ def match(jd, resume):
     if result.returncode != 0:
         raise AssertionError(result.stderr)
     return json.loads(result.stdout)
+
+
+class SynonymBoundaryTest(unittest.TestCase):
+    def test_javascript_does_not_match_node_or_vue_js(self):
+        self.assertFalse(jd_match.contains("JavaScript", "熟悉 Node.js 后端开发"))
+        self.assertFalse(jd_match.contains("JavaScript", "用 Vue.js 做过后台"))
+
+    def test_javascript_matches_javascript_itself(self):
+        self.assertTrue(jd_match.contains("JavaScript", "熟悉 JavaScript"))
+        self.assertTrue(jd_match.contains("JavaScript", "熟悉 JS"))
+
+    def test_go_short_token_is_case_sensitive(self):
+        self.assertFalse(jd_match.contains("Go", "go to market"))
+        self.assertTrue(jd_match.contains("Go", "Go"))
+        self.assertTrue(jd_match.contains("Go", "Golang"))
 
 
 class JdMatchTest(unittest.TestCase):
