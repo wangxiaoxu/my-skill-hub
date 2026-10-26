@@ -1,0 +1,6 @@
+interface:
+  display_name: "学习规划专家.Skill"
+  short_description: "把学习目标拆成里程碑、周计划与每日任务，按遗忘曲线排复习，并提供周复盘与中断重启方案。"
+  default_prompt: "Use $study-planner-expert to turn my learning goal into a verifiable weekly plan with spaced review and a restart strategy."
+policy:
+  allow_implicit_invocation: true

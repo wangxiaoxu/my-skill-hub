@@ -1,0 +1,6 @@
+2026-10-26T10:00:00.000Z INFO app started version=1.2.3
+2026-10-26T10:00:01.500Z INFO listening on :8080
+2026-10-26 10:00:05,100 ERROR db connect failed: connection refused to 10.0.0.1:5432
+    at repo.get (repo.py:31)
+2026-10-26T10:00:07Z WARN retrying request id=550e8400-e29b-41d4-a716-446655440000
+2026-10-26T10:00:09Z ERROR db connect failed: connection refused to 10.0.0.2:5432

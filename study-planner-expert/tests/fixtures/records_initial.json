@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "cards": [
+    {
+      "id": "c1",
+      "title": "二分查找边界",
+      "mastery": 0.5,
+      "last_review": "2026-10-24",
+      "interval": 1,
+      "ease": 2.5,
+      "repetitions": 0,
+      "due": "2026-10-26"
+    },
+    {
+      "id": "c2",
+      "title": "TCP 三次握手",
+      "mastery": 0.7,
+      "last_review": "2026-10-25",
+      "interval": 3,
+      "ease": 2.5,
+      "repetitions": 2,
+      "due": "2026-10-28"
+    },
+    {
+      "id": "c3",
+      "title": "动态规划状态转移",
+      "mastery": 0.3,
+      "last_review": "2026-10-20",
+      "interval": 1,
+      "ease": 2.3,
+      "repetitions": 0,
+      "due": "2026-10-23"
+    },
+    {
+      "id": "c4",
+      "title": "英语作文模板",
+      "mastery": 0.6,
+      "last_review": "2026-10-26",
+      "interval": 10,
+      "ease": 2.5,
+      "repetitions": 3,
+      "due": "2026-11-05"
+    }
+  ]
+}

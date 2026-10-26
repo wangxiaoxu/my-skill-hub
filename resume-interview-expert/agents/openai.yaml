@@ -1,0 +1,6 @@
+interface:
+  display_name: "简历面试专家.Skill"
+  short_description: "按 JD 逐条对齐打分、把职责改写成成果句、用真实追问链做模拟面试；不编造经历与数字。"
+  default_prompt: "Use $resume-interview-expert to align my resume with this job description and prepare for the interview without inventing anything."
+policy:
+  allow_implicit_invocation: true
