@@ -143,7 +143,9 @@ def probe(target, timeout=5.0):
         if scheme == "tcp":
             return _result(target, True, "ok", None, started, "TCP 连接成功")
 
-        host_header = host if port in DEFAULT_PORTS.values() else "%s:%d" % (host, port)
+        host_header = host if ":" not in host else "[%s]" % host
+        if port not in DEFAULT_PORTS.values():
+            host_header += ":%d" % port
         request = (
             "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: health-probe/1.0\r\n"
             "Accept: */*\r\nConnection: close\r\n\r\n" % (path, host_header)
