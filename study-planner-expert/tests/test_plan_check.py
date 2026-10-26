@@ -75,6 +75,21 @@ class PlanCheckTest(unittest.TestCase):
         codes = [item["code"] for item in payload["issues"]]
         self.assertIn("unparsed_tasks", codes)
 
+    def test_legal_buffer_day_without_tasks_passes(self):
+        text = (
+            "# 周计划\n\n"
+            "## 周一\n"
+            "- [ ] 数学：做 10 道题（30 分钟）\n"
+            "产出：完成 10 题并复习错题。\n\n"
+            "## 周日\n"
+            "缓冲日：休息\n"
+        )
+        result = call_cli("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["issues"], [])
+
     def test_custom_task_limit(self):
         result = call_cli(str(FIXTURES / "plan_good.md"), "--max-tasks", "1", "--json")
         self.assertEqual(result.returncode, 1)
