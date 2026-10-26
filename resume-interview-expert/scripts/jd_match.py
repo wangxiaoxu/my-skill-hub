@@ -21,7 +21,7 @@ import re
 # 常见技能/能力词典。英文词条用小写做键，中文按子串匹配。
 TERMS = [
     # 后端
-    "Java", "Python", "Go", "C++", "Spring", "Spring Boot", "Spring Cloud",
+    "Java", "Python", "Go", "C++", ".NET", "ASP.NET", "Spring", "Spring Boot", "Spring Cloud",
     "MySQL", "PostgreSQL", "Redis", "Kafka", "RabbitMQ", "Docker", "Kubernetes",
     "Linux", "Git", "微服务", "分布式", "高并发", "大流量", "消息队列", "中间件",
     "缓存", "数据库", "架构设计", "系统设计", "接口设计", "性能优化", "单元测试",
@@ -89,12 +89,15 @@ def _token_pattern(token, ignore_case):
 
 
 def _variant_forms(variant):
+    if variant.startswith("."):
+        # .NET 这类前导点 token 按原样大小写匹配，避免 “net revenue” 误命中。
+        return (variant,), False
     if len(variant) <= 2:
         return SHORT_TOKEN_CASE_FORMS.get(variant, (variant,)), False
     return (variant,), True
 
 
-EN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#._-]*")
+EN_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])\.?[A-Za-z][A-Za-z0-9+#._-]*")
 METRIC_RE = re.compile(
     r"\d+(?:\.\d+)?\s*(?:%|％|万|亿|倍|人|次|个|条|天|小时|分钟|ms|QPS|单|元|美元)"
 )
@@ -204,7 +207,7 @@ def extract_keywords(jd_text, lines):
             )
             keywords.setdefault(canonical, display)
     for match in EN_TOKEN_RE.finditer(jd_text):
-        raw = match.group(0).strip("._- ")
+        raw = match.group(0).rstrip("._-+ ")
         low = raw.lower()
         if len(low) < 2 or low.isdigit() or low in EN_STOPWORDS:
             continue

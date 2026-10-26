@@ -42,6 +42,18 @@ class SynonymBoundaryTest(unittest.TestCase):
         self.assertTrue(jd_match.contains("Go", "Golang"))
 
 
+class DotPrefixedTokenTest(unittest.TestCase):
+    def test_dotnet_matches_itself_only(self):
+        self.assertTrue(jd_match.contains(".NET", "张三 - .NET 开发 5 年"))
+        self.assertFalse(jd_match.contains(".NET", "net revenue 提升 30%"))
+        self.assertFalse(jd_match.contains(".NET", "asp net 开发"))
+
+    def test_asp_net_node_and_vue_match(self):
+        self.assertTrue(jd_match.contains("ASP.NET", "使用 ASP.NET 开发"))
+        self.assertTrue(jd_match.contains("Node.js", "使用 Node.js 开发"))
+        self.assertTrue(jd_match.contains("Vue.js", "使用 Vue.js 开发"))
+
+
 class JdMatchTest(unittest.TestCase):
     def test_strong_resume_matches_backend_jd(self):
         payload = match("jd_backend.txt", "resume_strong.txt")
@@ -267,6 +279,86 @@ class JdMatchTest(unittest.TestCase):
         items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
         keywords = {item["keyword"].lower() for item in items}
         self.assertIn("terraform", keywords)
+
+    def test_dotnet_is_extracted_and_matched(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "任职要求：熟悉 .NET 开发。\n", encoding="utf-8"
+            )
+            resume_path.write_text(
+                "张三 - .NET 开发 5 年\n", encoding="utf-8"
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        keywords = {item["keyword"]: item["matched"] for item in items}
+        self.assertIn(".NET", keywords)
+        self.assertTrue(keywords[".NET"])
+        self.assertNotIn(".NET", payload["gaps"]["required"])
+
+    def test_net_revenue_does_not_satisfy_dotnet(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "任职要求：熟悉 .NET 开发。\n", encoding="utf-8"
+            )
+            resume_path.write_text(
+                "张三 - net revenue 提升 30%\n", encoding="utf-8"
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        keywords = {item["keyword"]: item["matched"] for item in items}
+        self.assertIn(".NET", keywords)
+        self.assertFalse(keywords[".NET"])
+        self.assertIn(".NET", payload["gaps"]["required"])
+
+    def test_asp_net_node_and_vue_are_extracted(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "任职要求：\n"
+                "1. 熟悉 ASP.NET\n"
+                "2. 熟悉 Node.js\n"
+                "3. 熟悉 Vue.js\n",
+                encoding="utf-8",
+            )
+            resume_path.write_text(
+                "使用 ASP.NET、Node.js 与 Vue.js 开发\n", encoding="utf-8"
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        items = payload["keywords"]["required"] + payload["keywords"]["bonus"]
+        names = {item["keyword"] for item in items}
+        matched = {item["keyword"] for item in items if item["matched"]}
+        for keyword in ("ASP.NET", "Node.js", "Vue.js"):
+            self.assertIn(keyword, names)
+            self.assertIn(keyword, matched)
 
     def test_single_input_exits_2(self):
         result = invoke("--jd", str(FIXTURES / "jd_backend.txt"))
