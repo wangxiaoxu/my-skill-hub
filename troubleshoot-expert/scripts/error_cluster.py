@@ -50,6 +50,9 @@ JSON_LEVEL_KEYS = ("level", "severity", "lvl")
 JSON_STATUS_KEYS = ("status", "status_code", "statusCode", "http_status", "code")
 
 
+# 占位符里的 index 必须紧贴字母（STATUS0），让 NUM_RE 的
+# (?<![A-Za-z0-9]) lookbehind 不命中；若改成 "STATUS-0" 或纯数字，
+# 状态码会在 NUM_RE 阶段被替换成 <N>，保护失效。
 def _status_placeholder(index):
     return "\x01STATUS%d\x02" % index
 
