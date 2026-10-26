@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """把日志里的错误消息归一化后聚类，输出 Top N 错误族。
 
-归一化会替换：时间戳、UUID、十六进制、IP、文件路径、纯数字。
+归一化会替换：时间戳、UUID、十六进制、IP、文件路径、数字
+（包括紧跟单位或中文的数字，如 5s、500ms、重试3次）。
 JSON 日志会优先取 message / msg / error 字段，其余按整行处理。
 
 用法：
@@ -28,7 +29,9 @@ UUID_RE = re.compile(
 HEX_RE = re.compile(r"\b0x[0-9a-fA-F]+\b|\b[0-9a-fA-F]{12,}\b")
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b")
 PATH_RE = re.compile(r"(?:[A-Za-z]:\\[^\s\"']+|/[\w.\-]+(?:/[\w.\-]+)+)")
-NUM_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+# 数字可能紧跟单位（5s、500ms）或中文（重试3次），因此不能用尾部 \b；
+# 只要求左侧不是字母/数字，避免把 abc123 这类标识符拆开。
+NUM_RE = re.compile(r"(?<![A-Za-z0-9])[+-]?\d+(?:\.\d+)?")
 WS_RE = re.compile(r"\s+")
 
 JSON_MESSAGE_KEYS = ("message", "msg", "error", "err", "log", "detail")

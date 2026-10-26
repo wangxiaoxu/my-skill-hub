@@ -42,6 +42,23 @@ class NormalizeTest(unittest.TestCase):
         right = error_cluster.normalize("failed to open /tmp/b.txt after 9 tries")
         self.assertEqual(left, right)
 
+    def test_numbers_with_units_and_chinese(self):
+        self.assertEqual(error_cluster.normalize("timeout=5s"), "timeout=<N>s")
+        self.assertEqual(error_cluster.normalize("重试3次"), "重试<N>次")
+        self.assertEqual(error_cluster.normalize("took 500ms"), "took <N>ms")
+
+    def test_signed_numbers_normalize_together(self):
+        self.assertEqual(
+            error_cluster.normalize("offset=-42 +42 42"),
+            "offset=<N> <N> <N>",
+        )
+
+    def test_identifiers_keep_their_digits(self):
+        self.assertNotEqual(
+            error_cluster.normalize("abc123 failed"),
+            error_cluster.normalize("abc456 failed"),
+        )
+
 
 class ClusterCliTest(unittest.TestCase):
     def test_top_cluster_and_first_last_seen(self):
@@ -88,6 +105,51 @@ class ClusterCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["clusters"], [])
+
+    def test_unit_suffixed_numbers_merge(self):
+        text = "upstream timeout=5s\nupstream timeout=12s\nupstream timeout=3s\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(payload["clusters"][0]["count"], 3)
+        self.assertEqual(
+            payload["clusters"][0]["normalized"], "upstream timeout=<N>s"
+        )
+
+    def test_chinese_unit_numbers_merge(self):
+        text = "连接超时 重试3次\n连接超时 重试5次\n连接超时 重试8次\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(
+            payload["clusters"][0]["normalized"], "连接超时 重试<N>次"
+        )
+
+    def test_millisecond_values_merge(self):
+        text = "took 500ms\ntook 1200ms\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(payload["clusters"][0]["normalized"], "took <N>ms")
+
+    def test_same_template_numeric_values_are_one_family(self):
+        # 既有语义是「同模板即同族」：数字一律替换，所以 500 与 404 会合并。
+        # 仅当模板本身不同（status 与 code）时才分成两簇。
+        text = "status=500\nstatus=404\ncode=500\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+        counts = sorted(item["count"] for item in payload["clusters"])
+        self.assertEqual(counts, [1, 2])
+        status_cluster = [
+            item for item in payload["clusters"] if "status" in item["normalized"]
+        ][0]
+        self.assertEqual(status_cluster["normalized"], "status=<N>")
+        self.assertEqual(status_cluster["count"], 2)
 
     def test_help(self):
         result = run("--help")
