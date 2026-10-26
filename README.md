@@ -53,7 +53,9 @@ my-skill-hub/
 
 ## 校验
 
-`tools/validate_skills.py` 会扫描仓库内所有含 `SKILL.md` 的目录，检查 frontmatter、slug、SemVer、文件体积、二进制、references 引用、常见密钥模式与规定章节；任何一项失败退出码为 1。
+`tools/validate_skills.py` 会扫描仓库内所有含 `SKILL.md` 的目录，检查 frontmatter、slug、SemVer、文件体积、二进制、references 引用、常见密钥模式、规定章节，以及是否混入 `.omc/`、`.claude/`、`.venv/`、`__pycache__/` 等运行时产物；任何一项失败退出码为 1。
+
+> 单测会生成 `__pycache__/`，发布或校验前请先清理；也可以在运行测试与校验时设置 `PYTHONDONTWRITEBYTECODE=1`。
 
 ```bash
 python3 tools/validate_skills.py --json
