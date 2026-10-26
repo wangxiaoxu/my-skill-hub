@@ -4,7 +4,8 @@
 支持的时间戳格式：
   - ISO 8601：2026-10-26T12:34:56.789Z / 2026-10-26 12:34:56,789 +0800
   - nginx：26/Oct/2026:12:34:56 +0800
-  - syslog：Oct 26 12:34:56（年份用 --year 或从同文件其他时间戳推断）
+  - syslog：Oct 26 12:34:56（月份缩写大小写不敏感且不依赖 locale；
+    年份用 --year 或从同文件其他时间戳推断）
 
 时区处理：带时区的时间戳统一转成 UTC；不带时区的按 UTC 处理。
 无时间戳的行会挂在同文件上一条有时间戳的记录上，并标记为 untimed。
@@ -28,8 +29,14 @@ ISO_RE = re.compile(
 NGINX_RE = re.compile(
     r"(?P<ts>\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2}(?:\s+[+-]\d{4})?)"
 )
-SYSLOG_RE = re.compile(r"(?P<ts>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})")
+SYSLOG_RE = re.compile(r"(?P<ts>[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})")
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# 固定月份缩写，避免 strptime 的 %b 依赖进程 locale。
+MONTH_ABBR = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
 
 
 def _to_naive_utc(value):
@@ -65,8 +72,23 @@ def parse_timestamp(text, default_year=None):
     if match:
         year = default_year or datetime.now().year
         raw = re.sub(r"\s+", " ", match.group("ts"))
+        parts = re.match(
+            r"([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})", raw
+        )
+        if not parts:
+            return None
+        month = MONTH_ABBR.get(parts.group(1).lower())
+        if month is None:
+            return None
         try:
-            return datetime.strptime("%d %s" % (year, raw), "%Y %b %d %H:%M:%S")
+            return datetime(
+                year,
+                month,
+                int(parts.group(2)),
+                int(parts.group(3)),
+                int(parts.group(4)),
+                int(parts.group(5)),
+            )
         except ValueError:
             return None
 

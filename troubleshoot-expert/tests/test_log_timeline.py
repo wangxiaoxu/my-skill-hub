@@ -2,11 +2,15 @@ import json
 import subprocess
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "log_timeline.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+import log_timeline  # noqa: E402
 
 
 def run(*args, **kwargs):
@@ -16,6 +20,21 @@ def run(*args, **kwargs):
         text=True,
         **kwargs
     )
+
+
+class SyslogParsingTest(unittest.TestCase):
+    def test_month_abbreviation_is_locale_independent(self):
+        expected = datetime(2026, 10, 26, 12, 34, 56)
+        for text in ("Oct 26 12:34:56", "oct 26 12:34:56", "OCT 26 12:34:56"):
+            self.assertEqual(
+                log_timeline.parse_timestamp(text, default_year=2026),
+                expected,
+            )
+
+    def test_unknown_month_returns_none(self):
+        self.assertIsNone(
+            log_timeline.parse_timestamp("Foo 26 12:34:56", default_year=2026)
+        )
 
 
 class LogTimelineTest(unittest.TestCase):
