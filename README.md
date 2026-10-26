@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 故障排查专家.Skill | `troubleshoot-expert` | 从报错、日志或告警定位根因，给出可验证修复 | it-ops-security | 是 |
 | 简历面试专家.Skill | `resume-interview-expert` | JD 逐条对齐打分，改写成果句，模拟真实面试追问 | professional | 是 |
-| 学习规划专家.Skill | `study-planner-expert` | 把「我想学 X」拆成周计划与每日任务，按遗忘曲线排复习 | education | 是 |
+| 学习规划专家.Skill | `study-planner-expert` | 把学习目标拆成周计划与每日复习安排 | education | 是 |
 
 ## 安装与使用
 

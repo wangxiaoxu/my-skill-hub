@@ -6,6 +6,7 @@
   - 单日总时长是否超过上限（默认 240 分钟）
   - 单个任务块是否超过上限（默认 50 分钟）
   - 任务是否标注时长
+  - 日期标题下是否真的解析到了任务
   - 每天是否有验收物（产出/验收/正确率等）
   - 是否有缓冲日
   - 是否有复习安排
@@ -16,8 +17,8 @@
 """
 
 import argparse
-import json
 import re
+import json
 import sys
 
 HEADING_RE = re.compile(r"^(#{1,6})\s*(.+?)\s*$")
@@ -110,6 +111,17 @@ def check(text, max_tasks=3, max_daily_minutes=240, max_block_minutes=50):
     for day in days:
         name = day["name"]
         tasks = day["tasks"]
+        if not tasks:
+            issues.append(
+                issue(
+                    "unparsed_tasks",
+                    "warning",
+                    name,
+                    day["line"],
+                    "%s 没有解析到任何任务" % name,
+                    "用 `- [ ]` 或 `1.` 列出任务；休息日也写一条「休息/复盘」任务",
+                )
+            )
         if len(tasks) > max_tasks:
             issues.append(
                 issue(
@@ -251,7 +263,7 @@ def main(argv=None):
         default=50,
         help="单个任务块时长上限，分钟（默认 50）",
     )
-    parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--json", action="store_true", help="输出 JSON 报告")
     args = parser.parse_args(argv)
 
     if args.plan == "-":
@@ -287,11 +299,12 @@ def main(argv=None):
             ],
             "issues": issues,
         }
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        output = json.dumps(payload, ensure_ascii=False, indent=2)
+        print(output)
     else:
         print(render(days, issues, args.plan))
     return 0 if not issues else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

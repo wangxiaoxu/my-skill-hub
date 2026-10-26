@@ -3,7 +3,7 @@ name: study-planner-expert
 slug: study-planner-expert
 displayName: 学习规划专家.Skill
 version: 1.0.0
-summary: 把「我想学 X」拆成周计划与每日任务，按遗忘曲线排复习
+summary: 把学习目标拆成周计划与每日复习安排
 description: "Use when 用户要制定学习计划、备考计划、每日学习安排或复习计划；当用户说「我想学 X 怎么开始」「考研怎么规划」「帮我排个复习计划」「总是学了就忘」时。零配置、无需 API Key，附间隔复习排程脚本。"
 tags: [study-plan, spaced-repetition, exam-prep, learning, schedule]
 license: MIT
@@ -96,6 +96,6 @@ homepage: https://github.com/wangxiaoxu/my-skill-hub
 
 ## 兼容性
 
-- **Claude Code**：把技能目录放入技能搜索路径，`SKILL.md` 作为入口；脚本用 `python3 scripts/<name>.py` 运行。
-- **Codex CLI**：`agents/openai.yaml` 的 `interface.default_prompt` 通过 `$study-planner-expert` 引用本技能。
-- **Gemini CLI**：把目录加入扩展/技能路径，以 `SKILL.md` 为入口；`scripts/` 与 `tests/` 不依赖宿主。
+- **Claude Code**：把本目录纳入技能搜索范围后，`SKILL.md` 提供路由与流程；排程脚本可以独立运行。
+- **Codex CLI**：通过 `agents/openai.yaml` 里的 `$study-planner-expert` 触发，`short_description` 作为列表文案。
+- **Gemini CLI**：将目录挂到扩展路径，由 `SKILL.md` 承载说明；`scripts/` 与 `tests/` 均为纯标准库代码。
