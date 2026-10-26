@@ -53,7 +53,7 @@ homepage: https://github.com/wangxiaoxu/my-skill-hub
 ### 阶段 3：降噪与聚类
 
 - **输入**：阶段 2 的时间窗口。
-- **动作**：`python3 scripts/error_cluster.py <文件...> --top 10 --json`；同类错误会被归一化成同一族（数字、UUID、路径、时间戳、十六进制都被替换）。
+- **动作**：`python3 scripts/error_cluster.py <文件...> --top 10 --json`；同类错误会被归一化成同一族（数字、UUID、路径、时间戳、十六进制会被替换）。例外：`status=`、`code=` 与 access log 状态位中的 3 位 HTTP 状态码保留原值，500 与 404 不会被合并。
 - **产出**：Top N 错误族、首末次出现时间、原文样例；优先处理「数量最多」和「首次出现最早」两个族。
 
 ### 阶段 4：分层验证

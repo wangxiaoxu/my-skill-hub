@@ -59,6 +59,13 @@ class NormalizeTest(unittest.TestCase):
             error_cluster.normalize("abc456 failed"),
         )
 
+    def test_http_status_codes_are_preserved(self):
+        self.assertEqual(error_cluster.normalize("status=500"), "status=500")
+        self.assertEqual(error_cluster.normalize("code: 504"), "code: 504")
+        self.assertEqual(
+            error_cluster.normalize('HTTP/1.1" 404 12'), 'HTTP/<N>" 404 <N>'
+        )
+
 
 class ClusterCliTest(unittest.TestCase):
     def test_top_cluster_and_first_last_seen(self):
@@ -135,21 +142,128 @@ class ClusterCliTest(unittest.TestCase):
         self.assertEqual(payload["clusterCount"], 1)
         self.assertEqual(payload["clusters"][0]["normalized"], "took <N>ms")
 
-    def test_same_template_numeric_values_are_one_family(self):
-        # 既有语义是「同模板即同族」：数字一律替换，所以 500 与 404 会合并。
-        # 仅当模板本身不同（status 与 code）时才分成两簇。
-        text = "status=500\nstatus=404\ncode=500\n"
+    def test_non_status_numbers_use_same_template_family(self):
+        # 非状态上下文的数字仍按「同模板即同族」合并。
+        text = "retry=500\nretry=404\nattempt=500\n"
         result = run("-", "--json", input=text)
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["clusterCount"], 2)
         counts = sorted(item["count"] for item in payload["clusters"])
         self.assertEqual(counts, [1, 2])
-        status_cluster = [
-            item for item in payload["clusters"] if "status" in item["normalized"]
+        retry_cluster = [
+            item for item in payload["clusters"] if "retry" in item["normalized"]
         ][0]
-        self.assertEqual(status_cluster["normalized"], "status=<N>")
-        self.assertEqual(status_cluster["count"], 2)
+        self.assertEqual(retry_cluster["normalized"], "retry=<N>")
+        self.assertEqual(retry_cluster["count"], 2)
+
+    def test_http_status_codes_stay_distinct(self):
+        text = (
+            "HTTP status=500 upstream error\n"
+            "HTTP status=404 upstream error\n"
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+        self.assertEqual(
+            sorted(item["normalized"] for item in payload["clusters"]),
+            [
+                "HTTP status=404 upstream error",
+                "HTTP status=500 upstream error",
+            ],
+        )
+
+    def test_same_http_status_stays_together(self):
+        text = (
+            "HTTP status=500 upstream error after 3 retries\n"
+            "HTTP status=500 upstream error after 8 retries\n"
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(
+            payload["clusters"][0]["normalized"],
+            "HTTP status=500 upstream error after <N> retries",
+        )
+
+    def test_code_status_codes_stay_distinct(self):
+        text = "code=502 upstream error\ncode=504 upstream error\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+        self.assertEqual(
+            sorted(item["normalized"] for item in payload["clusters"]),
+            ["code=502 upstream error", "code=504 upstream error"],
+        )
+
+    def test_status_colon_and_comma_forms_keep_value(self):
+        text = (
+            "status: 500, upstream error\n"
+            "status: 404, upstream error\n"
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+
+    def test_quoted_json_status_key_keeps_value(self):
+        text = (
+            '{"status": 500, "message": "upstream error"}\n'
+            '{"status": 404, "message": "upstream error"}\n'
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+        self.assertEqual(
+            sorted(item["normalized"] for item in payload["clusters"]),
+            [
+                "status=404 upstream error",
+                "status=500 upstream error",
+            ],
+        )
+
+    def test_access_log_status_codes_stay_distinct(self):
+        text = (
+            '10.0.0.1 - - "GET /x HTTP/1.1" 404 -\n'
+            '10.0.0.1 - - "GET /x HTTP/1.1" 500 -\n'
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 2)
+        self.assertEqual(
+            sorted(item["normalized"] for item in payload["clusters"]),
+            [
+                '<IP> - - "GET /x HTTP/<N>" 404 -',
+                '<IP> - - "GET /x HTTP/<N>" 500 -',
+            ],
+        )
+
+    def test_access_log_same_status_merges_across_sizes(self):
+        text = (
+            '"GET /x HTTP/1.1" 500 1234\n'
+            '"GET /x HTTP/1.1" 500 5678\n'
+        )
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(
+            payload["clusters"][0]["normalized"],
+            '"GET /x HTTP/<N>" 500 <N>',
+        )
+
+    def test_port_numbers_still_merge(self):
+        text = "port=8080\nport=9090\n"
+        result = run("-", "--json", input=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["clusterCount"], 1)
+        self.assertEqual(payload["clusters"][0]["normalized"], "port=<N>")
 
     def test_help(self):
         result = run("--help")

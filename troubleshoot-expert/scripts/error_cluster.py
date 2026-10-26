@@ -3,6 +3,8 @@
 
 归一化会替换：时间戳、UUID、十六进制、IP、文件路径、数字
 （包括紧跟单位或中文的数字，如 5s、500ms、重试3次）。
+例外：status=/code=/access log 状态位中的 3 位 HTTP 状态码保留原值，
+避免把 500 与 404 合并成同一错误族。
 JSON 日志会优先取 message / msg / error 字段，其余按整行处理。
 
 用法：
@@ -34,14 +36,41 @@ PATH_RE = re.compile(r"(?:[A-Za-z]:\\[^\s\"']+|/[\w.\-]+(?:/[\w.\-]+)+)")
 NUM_RE = re.compile(r"(?<![A-Za-z0-9])[+-]?\d+(?:\.\d+)?")
 WS_RE = re.compile(r"\s+")
 
+# HTTP 状态码只在明确的状态上下文里保留：status=/code=/access log 状态位。
+# 保护发生在所有数字替换之前，归一化结束后再原样恢复。
+STATUS_PATTERNS = (
+    re.compile(r"(?i)([\"']?\bstatus[\"']?\s*[=:]\s*)(\d{3})(?=\b|[,.;]|$)"),
+    re.compile(r"(?i)([\"']?\bcode[\"']?\s*[=:]\s*)(\d{3})(?=\b|[,.;]|$)"),
+    re.compile(r'(HTTP/\d(?:\.\d)?"\s+)(\d{3})(?=\s|$)'),
+)
+
 JSON_MESSAGE_KEYS = ("message", "msg", "error", "err", "log", "detail")
 JSON_TIME_KEYS = ("timestamp", "time", "ts", "@timestamp", "date")
 JSON_LEVEL_KEYS = ("level", "severity", "lvl")
+JSON_STATUS_KEYS = ("status", "status_code", "statusCode", "http_status", "code")
+
+
+def _status_placeholder(index):
+    return "\x01STATUS%d\x02" % index
+
+
+def _protect_status_codes(text):
+    """把状态码替换成不含数字的占位符，返回 (文本, 原值列表)。"""
+    values = []
+
+    def replace(match):
+        values.append(match.group(2))
+        return match.group(1) + _status_placeholder(len(values) - 1)
+
+    for pattern in STATUS_PATTERNS:
+        text = pattern.sub(replace, text)
+    return text, values
 
 
 def normalize(message):
-    """把一条错误消息归一化成语义骨架。"""
-    text = ISO_TS_RE.sub("<TS>", message)
+    """把一条错误消息归一化成语义骨架；HTTP 状态码保留原值。"""
+    text, status_codes = _protect_status_codes(message)
+    text = ISO_TS_RE.sub("<TS>", text)
     text = UUID_RE.sub("<UUID>", text)
     text = HEX_RE.sub("<HEX>", text)
     text = IP_RE.sub("<IP>", text)
@@ -49,6 +78,8 @@ def normalize(message):
     text = DATE_RE.sub("<DATE>", text)
     text = NUM_RE.sub("<N>", text)
     text = WS_RE.sub(" ", text).strip()
+    for index, value in enumerate(status_codes):
+        text = text.replace(_status_placeholder(index), value)
     return text
 
 
@@ -67,6 +98,21 @@ def parse_timestamp(text):
     if value.tzinfo is not None:
         value = value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
+
+
+def _json_status(payload):
+    """从结构化日志的 status/code 字段取 3 位状态码。"""
+    for key in JSON_STATUS_KEYS:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and 100 <= value <= 599:
+            return value
+        if isinstance(value, str) and value.strip().isdigit():
+            number = int(value.strip())
+            if 100 <= number <= 599:
+                return number
+    return None
 
 
 def _strip_leading_timestamp(text):
@@ -110,6 +156,9 @@ def extract(line, field=None):
                     if timestamp is not None:
                         break
             if message is not None:
+                status = _json_status(payload)
+                if status is not None and "status=" not in message.lower():
+                    message = "status=%d %s" % (status, message)
                 level = None
                 for key in JSON_LEVEL_KEYS:
                     value = payload.get(key)
@@ -184,7 +233,10 @@ def render(entry):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="错误消息归一化并聚类，输出 Top N 错误族。",
+        description=(
+            "错误消息归一化并聚类，输出 Top N 错误族；"
+            "status=/code=/access log 状态位中的 HTTP 状态码保留原值。"
+        ),
         epilog="示例：python3 error_cluster.py app.log --top 5 --json",
     )
     parser.add_argument("files", nargs="*", default=["-"], help="日志文件，默认从 stdin 读取（- 表示 stdin）")
