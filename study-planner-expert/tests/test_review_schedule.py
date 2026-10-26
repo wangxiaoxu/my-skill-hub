@@ -1,8 +1,8 @@
 import json
 import shutil
 import subprocess
-import sys
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 
@@ -11,13 +11,9 @@ SCRIPT = ROOT / "scripts" / "review_schedule.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def run(*args, **kwargs):
-    return subprocess.run(
-        [sys.executable, str(SCRIPT)] + list(args),
-        capture_output=True,
-        text=True,
-        **kwargs
-    )
+def call_cli(*args, **kwargs):
+    argv = [sys.executable, str(SCRIPT)] + list(args)
+    return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
 
 class ReviewScheduleTest(unittest.TestCase):
@@ -30,7 +26,7 @@ class ReviewScheduleTest(unittest.TestCase):
         self.tempdir.cleanup()
 
     def plan(self, days=7, today="2026-10-26"):
-        result = run(
+        result = call_cli(
             "--records",
             str(self.records),
             "--days",
@@ -43,7 +39,7 @@ class ReviewScheduleTest(unittest.TestCase):
         return json.loads(result.stdout)
 
     def advance(self, card_id, grade, today="2026-10-26"):
-        result = run(
+        result = call_cli(
             "--records",
             str(self.records),
             "--advance",
@@ -131,7 +127,7 @@ class ReviewScheduleTest(unittest.TestCase):
         self.assertEqual(plan["schedule"][6]["count"], 1)
 
     def test_invalid_grade_exits_2(self):
-        result = run(
+        result = call_cli(
             "--records",
             str(self.records),
             "--advance",
@@ -144,11 +140,11 @@ class ReviewScheduleTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
     def test_grade_without_advance_exits_2(self):
-        result = run("--records", str(self.records), "--grade", "4")
+        result = call_cli("--records", str(self.records), "--grade", "4")
         self.assertEqual(result.returncode, 2)
 
     def test_unknown_card_exits_2(self):
-        result = run(
+        result = call_cli(
             "--records",
             str(self.records),
             "--advance",
@@ -160,7 +156,7 @@ class ReviewScheduleTest(unittest.TestCase):
         self.assertIn("找不到卡片", result.stderr)
 
     def test_missing_records_exits_2(self):
-        result = run(
+        result = call_cli(
             "--records",
             str(Path(self.tempdir.name) / "missing.json"),
             "--today",
@@ -170,10 +166,10 @@ class ReviewScheduleTest(unittest.TestCase):
         self.assertIn("不存在", result.stderr)
 
     def test_help(self):
-        result = run("--help")
+        result = call_cli("--help")
         self.assertEqual(result.returncode, 0)
         self.assertIn("usage", result.stdout.lower())
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=1)

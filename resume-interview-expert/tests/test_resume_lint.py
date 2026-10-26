@@ -1,7 +1,7 @@
 import json
 import subprocess
-import sys
 import unittest
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,18 +9,16 @@ SCRIPT = ROOT / "scripts" / "resume_lint.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def run(*args, **kwargs):
+def invoke(*args, **kwargs):
+    command = [sys.executable, str(SCRIPT), *args]
     return subprocess.run(
-        [sys.executable, str(SCRIPT)] + list(args),
-        capture_output=True,
-        text=True,
-        **kwargs
+        command, capture_output=True, text=True, **kwargs
     )
 
 
 class ResumeLintTest(unittest.TestCase):
     def test_broken_resume_hits_at_least_four_categories(self):
-        result = run(str(FIXTURES / "resume_broken.txt"), "--json")
+        result = invoke(str(FIXTURES / "resume_broken.txt"), "--json")
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         codes = {item["code"] for item in payload["issues"]}
@@ -39,7 +37,7 @@ class ResumeLintTest(unittest.TestCase):
         self.assertTrue(all(item["line"] > 0 for item in weak))
 
     def test_good_resume_passes(self):
-        result = run(str(FIXTURES / "resume_good.txt"), "--json")
+        result = invoke(str(FIXTURES / "resume_good.txt"), "--json")
         self.assertEqual(result.returncode, 0, result.stdout)
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
@@ -53,7 +51,7 @@ class ResumeLintTest(unittest.TestCase):
             "- 主导接口优化，P99 下降 40%，覆盖 3 个业务线。\n"
             "- 主导 <待补：QPS> 的压测。\n"
         )
-        result = run("-", "--json", input=text)
+        result = invoke("-", "--json", input=text)
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         codes = [item["code"] for item in payload["issues"]]
@@ -61,15 +59,15 @@ class ResumeLintTest(unittest.TestCase):
         self.assertEqual(payload["issues"][0]["line"], 4)
 
     def test_missing_file_exits_2(self):
-        result = run(str(FIXTURES / "does-not-exist.txt"))
+        result = invoke(str(FIXTURES / "does-not-exist.txt"))
         self.assertEqual(result.returncode, 2)
         self.assertIn("无法读取", result.stderr)
 
     def test_help(self):
-        result = run("--help")
+        result = invoke("--help")
         self.assertEqual(result.returncode, 0)
         self.assertIn("usage", result.stdout.lower())
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)

@@ -236,7 +236,7 @@ def main(argv=None):
     parser.add_argument("--today", help="基准日期 YYYY-MM-DD，默认今天")
     parser.add_argument("--advance", metavar="ID", help="更新某张卡片的复习结果")
     parser.add_argument("--grade", type=int, help="复习评分 0-5，与 --advance 一起使用")
-    parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--json", action="store_true", help="输出 JSON 报告")
     args = parser.parse_args(argv)
 
     if args.today:
@@ -288,7 +288,8 @@ def main(argv=None):
             "after": public_card(updated),
         }
         if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            output = json.dumps(payload, ensure_ascii=False, indent=2)
+            print(output)
         else:
             print(render_advance(payload))
         return 0
@@ -298,11 +299,12 @@ def main(argv=None):
 
     plan = build_plan(records, today, args.days)
     if args.json:
-        print(json.dumps(plan, ensure_ascii=False, indent=2))
+        output = json.dumps(plan, ensure_ascii=False, indent=2)
+        print(output)
     else:
         print(render_plan(plan))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

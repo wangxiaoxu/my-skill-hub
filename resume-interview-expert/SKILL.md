@@ -95,6 +95,6 @@ homepage: https://github.com/wangxiaoxu/my-skill-hub
 
 ## 兼容性
 
-- **Claude Code**：把技能目录放入技能搜索路径，`SKILL.md` 作为入口；脚本用 `python3 scripts/<name>.py` 运行。
-- **Codex CLI**：`agents/openai.yaml` 的 `interface.default_prompt` 通过 `$resume-interview-expert` 引用本技能。
-- **Gemini CLI**：把目录加入扩展/技能路径，以 `SKILL.md` 为入口；`scripts/` 与 `tests/` 不依赖宿主。
+- **Claude Code**：技能索引会读取 `SKILL.md` 的 frontmatter 与正文；评分和体检脚本用标准库实现，可直接调用。
+- **Codex CLI**：`agents/openai.yaml` 的 `default_prompt` 用 `$resume-interview-expert` 指向本技能，列表卡片展示短描述。
+- **Gemini CLI**：目录加入扩展路径后由 `SKILL.md` 承载说明；`scripts/` 和 `tests/` 不依赖任何运行时框架。

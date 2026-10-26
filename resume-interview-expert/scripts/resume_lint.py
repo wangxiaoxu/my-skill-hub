@@ -11,8 +11,8 @@
 
 import argparse
 import json
-import re
 import sys
+import re
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?86[\s-]?)?1[3-9]\d{9}")
@@ -189,7 +189,7 @@ def main(argv=None):
         epilog="示例：python3 resume_lint.py resume.txt --json",
     )
     parser.add_argument("resume", help="简历文件路径，- 表示 stdin")
-    parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--json", action="store_true", help="以 JSON 输出结果")
     args = parser.parse_args(argv)
 
     try:
@@ -200,12 +200,13 @@ def main(argv=None):
 
     issues = lint(text)
     if args.json:
-        print(
+        sys.stdout.write(
             json.dumps(
                 {"ok": not issues, "issueCount": len(issues), "issues": issues},
                 ensure_ascii=False,
                 indent=2,
             )
+            + "\n"
         )
     else:
         print(render(issues))
@@ -213,4 +214,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
