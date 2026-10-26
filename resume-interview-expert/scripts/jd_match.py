@@ -3,6 +3,7 @@
 
 输入：JD 文本 + 简历文本（文件或 - 表示 stdin）。
 输出：覆盖/深度/证据三个维度分数、综合分、结论、缺口清单。
+JD 为空或抽不出任何关键词时退出码 2，不给出误导性结论。
 
 用法：
     python3 jd_match.py --jd jd.txt --resume resume.txt
@@ -12,8 +13,8 @@
 
 import argparse
 import json
-import re
 import sys
+import re
 
 # 常见技能/能力词典。英文词条用小写做键，中文按子串匹配。
 TERMS = [
@@ -43,6 +44,32 @@ TERMS = [
     "沟通能力", "团队管理", "英语", "抗压能力", "学习能力", "责任心",
     "执行力", "汇报", "文档",
 ]
+
+# 同义词组：canonical_lower -> (统一展示名, 所有可匹配写法)
+# 关键词按 canonical 去重，匹配与计数时遍历所有写法。
+SYNONYM_GROUPS = {
+    "kubernetes": ("Kubernetes", ["kubernetes", "k8s"]),
+    "javascript": ("JavaScript", ["javascript", "js"]),
+    "postgresql": ("PostgreSQL", ["postgresql", "postgres", "pg"]),
+    "go": ("Go", ["go", "golang"]),
+}
+VARIANT_TO_CANONICAL = {}
+for _canonical, (_display, _variants) in SYNONYM_GROUPS.items():
+    for _variant in _variants:
+        VARIANT_TO_CANONICAL[_variant] = _canonical
+
+
+def canonical_key(term):
+    low = term.lower()
+    return VARIANT_TO_CANONICAL.get(low, low)
+
+
+def keyword_variants(term):
+    canonical = canonical_key(term)
+    if canonical in SYNONYM_GROUPS:
+        return SYNONYM_GROUPS[canonical][1]
+    return [term]
+
 
 EN_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.]{1,}")
 METRIC_RE = re.compile(
@@ -76,17 +103,26 @@ def is_ascii(text):
 
 
 def contains(keyword, text):
-    if is_ascii(keyword):
-        pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(keyword)
-        return re.search(pattern, text, re.IGNORECASE) is not None
-    return keyword.lower() in text.lower()
+    lowered = text.lower()
+    for variant in keyword_variants(keyword):
+        if is_ascii(variant):
+            pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(variant)
+            if re.search(pattern, text, re.IGNORECASE) is not None:
+                return True
+        elif variant.lower() in lowered:
+            return True
+    return False
 
 
 def count_occurrences(keyword, text):
-    if is_ascii(keyword):
-        pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(keyword)
-        return len(re.findall(pattern, text, re.IGNORECASE))
-    return text.lower().count(keyword.lower())
+    total = 0
+    for variant in keyword_variants(keyword):
+        if is_ascii(variant):
+            pattern = r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(variant)
+            total += len(re.findall(pattern, text, re.IGNORECASE))
+        else:
+            total += text.lower().count(variant.lower())
+    return total
 
 
 def classify_lines(lines):
@@ -107,23 +143,37 @@ def classify_lines(lines):
 
 
 def extract_keywords(jd_text):
-    """从 JD 中抽取词典词与英文技术词，返回 {小写键: 展示用原文}。"""
+    """从 JD 中抽取词典词与英文技术词，按同义词 canonical 去重。"""
     keywords = {}
     for term in TERMS:
         if contains(term, jd_text):
-            keywords.setdefault(term.lower(), term)
+            canonical = canonical_key(term)
+            display = (
+                SYNONYM_GROUPS[canonical][0]
+                if canonical in SYNONYM_GROUPS
+                else term
+            )
+            keywords.setdefault(canonical, display)
     for match in EN_TOKEN_RE.finditer(jd_text):
         raw = match.group(0).strip("._-+ ")
         low = raw.lower()
         if len(low) < 2 or low.isdigit() or low in EN_STOPWORDS:
             continue
-        keywords.setdefault(low, raw)
+        canonical = canonical_key(low)
+        display = (
+            SYNONYM_GROUPS[canonical][0]
+            if canonical in SYNONYM_GROUPS
+            else raw
+        )
+        keywords.setdefault(canonical, display)
     return keywords
 
 
 def score(jd_text, resume_text):
     lines = classify_lines(jd_text.splitlines() or [jd_text])
     keywords = extract_keywords(jd_text)
+    if not keywords:
+        raise ValueError("未能从 JD 中识别出任何关键词")
 
     required = []
     bonus = []
@@ -254,7 +304,7 @@ def main(argv=None):
     parser.add_argument("paths", nargs="*", help="位置参数：JD 文件 简历文件")
     parser.add_argument("--jd", help="JD 文件路径，- 表示 stdin")
     parser.add_argument("--resume", help="简历文件路径，- 表示 stdin")
-    parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument("--json", action="store_true", help="以 JSON 输出结果")
     args = parser.parse_args(argv)
 
     if args.jd or args.resume:
@@ -276,11 +326,18 @@ def main(argv=None):
         print("错误：无法读取输入：%s" % exc, file=sys.stderr)
         return 2
 
-    result = score(jd_text, resume_text)
+    if not jd_text.strip():
+        print("错误：JD 为空，无法计算匹配度。", file=sys.stderr)
+        return 2
+    try:
+        result = score(jd_text, resume_text)
+    except ValueError as exc:
+        print("错误：%s" % exc, file=sys.stderr)
+        return 2
     if args.json:
         payload = dict(result)
         payload["ok"] = True
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
         return 0
 
     print(render(result))
@@ -288,4 +345,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

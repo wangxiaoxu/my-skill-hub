@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,17 +10,15 @@ SCRIPT = ROOT / "scripts" / "jd_match.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def run(*args, **kwargs):
+def invoke(*args, **kwargs):
+    command = [sys.executable, str(SCRIPT), *args]
     return subprocess.run(
-        [sys.executable, str(SCRIPT)] + list(args),
-        capture_output=True,
-        text=True,
-        **kwargs
+        command, capture_output=True, text=True, **kwargs
     )
 
 
 def match(jd, resume):
-    result = run("--jd", str(FIXTURES / jd), "--resume", str(FIXTURES / resume), "--json")
+    result = invoke("--jd", str(FIXTURES / jd), "--resume", str(FIXTURES / resume), "--json")
     if result.returncode != 0:
         raise AssertionError(result.stderr)
     return json.loads(result.stdout)
@@ -57,7 +56,7 @@ class JdMatchTest(unittest.TestCase):
 
     def test_positional_arguments_match_flags(self):
         with_flags = match("jd_backend.txt", "resume_strong.txt")
-        result = run(
+        result = invoke(
             str(FIXTURES / "jd_backend.txt"),
             str(FIXTURES / "resume_strong.txt"),
             "--json",
@@ -69,7 +68,7 @@ class JdMatchTest(unittest.TestCase):
 
     def test_stdin_resume(self):
         resume = (FIXTURES / "resume_strong.txt").read_text(encoding="utf-8")
-        result = run(
+        result = invoke(
             "--jd",
             str(FIXTURES / "jd_backend.txt"),
             "--resume",
@@ -82,12 +81,101 @@ class JdMatchTest(unittest.TestCase):
             json.loads(result.stdout)["coverage"]["required"]["percent"], 75.0
         )
 
+    def test_synonyms_are_normalized(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text(
+                "任职要求：\n"
+                "1. 熟悉 K8s\n"
+                "2. 熟悉 JS\n"
+                "3. 熟悉 Postgres\n"
+                "4. 熟悉 Golang\n",
+                encoding="utf-8",
+            )
+            resume_path.write_text(
+                "使用 Kubernetes 部署，使用 JavaScript 开发，"
+                "使用 PostgreSQL 存储，使用 Go 写服务。\n",
+                encoding="utf-8",
+            )
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        matched = {
+            item["keyword"]
+            for item in payload["keywords"]["required"]
+            if item["matched"]
+        }
+        self.assertEqual(
+            matched, {"Kubernetes", "JavaScript", "PostgreSQL", "Go"}
+        )
+        self.assertEqual(payload["coverage"]["required"]["percent"], 100.0)
+        self.assertEqual(payload["gaps"]["required"], [])
+
+    def test_go_does_not_match_google(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text("任职要求：熟悉 Google Cloud。\n", encoding="utf-8")
+            resume_path.write_text("使用 Go 写服务。\n", encoding="utf-8")
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        keywords = [
+            item["keyword"]
+            for item in payload["keywords"]["required"]
+            + payload["keywords"]["bonus"]
+        ]
+        self.assertNotIn("Go", keywords)
+
+    def test_empty_jd_exits_2(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text("", encoding="utf-8")
+            resume_path.write_text("张三\n电话：13800000000\n", encoding="utf-8")
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("JD 为空", result.stderr)
+
+    def test_keywordless_jd_exits_2(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            jd_path = Path(tempdir) / "jd.txt"
+            resume_path = Path(tempdir) / "resume.txt"
+            jd_path.write_text("你好，欢迎加入我们。\n", encoding="utf-8")
+            resume_path.write_text("张三\n电话：13800000000\n", encoding="utf-8")
+            result = invoke(
+                "--jd",
+                str(jd_path),
+                "--resume",
+                str(resume_path),
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("未能从 JD 中识别出任何关键词", result.stderr)
+
     def test_single_input_exits_2(self):
-        result = run("--jd", str(FIXTURES / "jd_backend.txt"))
+        result = invoke("--jd", str(FIXTURES / "jd_backend.txt"))
         self.assertEqual(result.returncode, 2)
 
     def test_missing_file_exits_2(self):
-        result = run(
+        result = invoke(
             "--jd",
             str(FIXTURES / "missing-jd.txt"),
             "--resume",
@@ -97,10 +185,10 @@ class JdMatchTest(unittest.TestCase):
         self.assertIn("无法读取", result.stderr)
 
     def test_help(self):
-        result = run("--help")
+        result = invoke("--help")
         self.assertEqual(result.returncode, 0)
         self.assertIn("usage", result.stdout.lower())
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)
