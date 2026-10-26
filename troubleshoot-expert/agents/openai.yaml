@@ -1,0 +1,6 @@
+interface:
+  display_name: "故障排查专家.Skill"
+  short_description: "从报错、日志或告警定位根因：建时间线、聚类错误、分层验证，给出可复现的修复与回滚方案。"
+  default_prompt: "Use $troubleshoot-expert to turn this error, log, or alert into a verified root cause with a reproducible fix."
+policy:
+  allow_implicit_invocation: true

@@ -1,2 +1,7 @@
 # OMC runtime state
 .omc/
+
+# Python / macOS noise
+__pycache__/
+*.pyc
+.DS_Store
