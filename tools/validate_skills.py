@@ -6,7 +6,8 @@
   - slug 为 kebab-case，version 为合法 SemVer
   - description 单行、双引号包裹、不含裸冒号
   - 文件数 / 总体积 / 单文件体积 / 二进制文件
-  - 技能目录内是否混入运行时产物（.omc/.claude/.venv/__pycache__ 等）
+  - 技能目录内是否混入会被打包的运行时目录（.omc/.claude/.scratch/.venv）
+    （.git/.idea/.vscode/node_modules/__pycache__ 与 *.pyc/.DS_Store 由 CLI 排除，不检查）
   - SKILL.md 规定的 6 个二级标题
   - 路由表里提到的 references 文件真实存在
   - 常见密钥模式
@@ -71,12 +72,11 @@ SKIP_DIRS = {
     ".pytest_cache", ".mypy_cache", ".codegraph", ".venv", "venv",
 }
 
-# 这些不是「跳过」，而是「出现即失败」：发布包会把它们原样上传。
-FORBIDDEN_RUNTIME_DIRS = {
-    ".omc", ".claude", ".scratch", ".venv", "node_modules", "__pycache__",
-}
-FORBIDDEN_RUNTIME_FILES = {".DS_Store"}
-FORBIDDEN_RUNTIME_SUFFIXES = {".pyc"}
+# skillhub CLI 打包时已排除这些目录，不会进入发布包，因此校验不报错。
+CLI_EXCLUDED_DIRS = {".git", ".idea", ".vscode", "node_modules", "__pycache__"}
+
+# 这些目录不在 CLI 的排除列表里，出现即会被打包，必须硬失败。
+FORBIDDEN_RUNTIME_DIRS = {".omc", ".claude", ".scratch", ".venv"}
 
 SECRET_PATTERNS = [
     ("OpenAI 风格 key", re.compile(r"(?<![A-Za-z0-9_])sk-[A-Za-z0-9_-]{20,}")),
@@ -183,24 +183,19 @@ def collect_files(skill_dir):
 
 
 def find_runtime_artifacts(skill_dir):
-    """返回技能目录内禁止发布的运行时产物（目录以 / 结尾）。"""
+    """返回会被打包进发布包、但不应发布的运行时目录（以 / 结尾）。"""
     hits = []
-    for dirpath, dirnames, filenames in os.walk(str(skill_dir)):
+    for dirpath, dirnames, _ in os.walk(str(skill_dir)):
         base = Path(dirpath)
         keep = []
         for name in sorted(dirnames):
             if name in FORBIDDEN_RUNTIME_DIRS:
                 hits.append((base / name).relative_to(skill_dir).as_posix() + "/")
+            elif name in CLI_EXCLUDED_DIRS:
+                continue
             else:
                 keep.append(name)
         dirnames[:] = keep
-        for name in sorted(filenames):
-            path = base / name
-            if (
-                name in FORBIDDEN_RUNTIME_FILES
-                or path.suffix.lower() in FORBIDDEN_RUNTIME_SUFFIXES
-            ):
-                hits.append(path.relative_to(skill_dir).as_posix())
     return hits
 
 
